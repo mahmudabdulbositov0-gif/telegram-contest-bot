@@ -1,14 +1,4 @@
 
-
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-
-# @userinfobot orqali olingan Telegram ID'ingizni yozing
-ADMIN_ID = 7018749665
-
-
-
-
-
 import asyncio
 import json
 import os
@@ -16,6 +6,13 @@ import random
 import re
 
 from aiogram import Bot, Dispatcher
+
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+# @userinfobot orqali olingan Telegram ID'ingizni yozing
+ADMIN_ID = 7018749665
+
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
