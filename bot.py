@@ -1,8 +1,18 @@
+
+
+
+
+
+
 import asyncio
 import json
 import os
 import random
 import re
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+ADMIN_ID = 7018749665
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.aiohttp import AiohttpSession
@@ -24,9 +34,7 @@ from aiogram.types import (
 # SOZLAMALAR
 # =========================================================
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-ADMIN_ID = 7018749665
 
 
 # =========================================================
@@ -60,6 +68,7 @@ dp = Dispatcher()
 # =========================================================
 
 def save_json(filename, data):
+
     with open(
         filename,
         "w",
@@ -95,11 +104,7 @@ def load_json(filename, default):
 
             return json.load(f)
 
-    except Exception as e:
-
-        print(
-            f"JSON LOAD ERROR {filename}: {e}"
-        )
+    except Exception:
 
         return default
 
@@ -119,20 +124,27 @@ def load_users():
 
         result = {}
 
-        for user in data:
+        for item in data:
 
-            if not isinstance(
-                user,
-                dict
-            ):
+            try:
+
+                user_id = int(item)
+
+            except:
+
                 continue
 
-            user_id = user.get("id")
+            result[str(user_id)] = {
 
-            if user_id is None:
-                continue
+                "id": user_id,
 
-            result[str(user_id)] = user
+                "first_name": "",
+
+                "username": "",
+
+                "completed_channels": []
+
+            }
 
         save_json(
             USERS_FILE,
@@ -141,10 +153,7 @@ def load_users():
 
         return result
 
-    if not isinstance(
-        data,
-        dict
-    ):
+    if not isinstance(data, dict):
 
         return {}
 
@@ -163,32 +172,37 @@ def add_user(user):
 
     users = load_users()
 
-    user_id = str(
+    key = str(
         user.id
     )
 
-    if user_id not in users:
+    if key not in users:
 
-        users[user_id] = {
+        users[key] = {
+
             "id": user.id,
+
             "first_name": user.first_name or "",
+
             "username": user.username or "",
+
             "completed_channels": []
+
         }
 
     else:
 
-        users[user_id]["first_name"] = (
+        users[key]["first_name"] = (
             user.first_name or ""
         )
 
-        users[user_id]["username"] = (
+        users[key]["username"] = (
             user.username or ""
         )
 
-        if "completed_channels" not in users[user_id]:
+        if "completed_channels" not in users[key]:
 
-            users[user_id]["completed_channels"] = []
+            users[key]["completed_channels"] = []
 
     save_users(
         users
@@ -206,10 +220,7 @@ def load_admins():
         []
     )
 
-    if not isinstance(
-        data,
-        list
-    ):
+    if not isinstance(data, list):
 
         return []
 
@@ -223,7 +234,8 @@ def load_admins():
                 int(item)
             )
 
-        except Exception:
+        except:
+
             pass
 
     return result
@@ -239,10 +251,10 @@ def save_admins(data):
 
 def is_admin(user_id):
 
-    if user_id == ADMIN_ID:
-        return True
-
-    return user_id in load_admins()
+    return (
+        user_id == ADMIN_ID
+        or user_id in load_admins()
+    )
 
 
 # =========================================================
@@ -256,14 +268,74 @@ def load_channels():
         []
     )
 
-    if not isinstance(
-        data,
-        list
-    ):
+    if not isinstance(data, list):
 
         return []
 
-    return data
+    result = []
+
+    for item in data:
+
+        if not isinstance(item, dict):
+
+            continue
+
+        item_type = item.get("type")
+
+        if item_type == "channel":
+
+            try:
+
+                channel_id = int(
+                    item.get("id")
+                )
+
+            except:
+
+                continue
+
+            result.append({
+
+                "type": "channel",
+
+                "id": channel_id,
+
+                "name": item.get(
+                    "name",
+                    "Kanal"
+                ),
+
+                "link": item.get(
+                    "link",
+                    ""
+                )
+
+            })
+
+        elif item_type == "bot":
+
+            result.append({
+
+                "type": "bot",
+
+                "name": item.get(
+                    "name",
+                    "Bot"
+                ),
+
+                "username": item.get(
+                    "username",
+                    ""
+                ),
+
+                "link": item.get(
+                    "link",
+                    ""
+                )
+
+            })
+
+    return result
 
 
 def save_channels(data):
@@ -285,10 +357,7 @@ def load_requests():
         {}
     )
 
-    if not isinstance(
-        data,
-        dict
-    ):
+    if not isinstance(data, dict):
 
         return {}
 
@@ -314,10 +383,7 @@ def load_winner():
         {}
     )
 
-    if not isinstance(
-        data,
-        dict
-    ):
+    if not isinstance(data, dict):
 
         return {}
 
@@ -336,7 +402,7 @@ def save_winner(data):
 # RANDOM
 # =========================================================
 
-def load_random_status():
+def get_random_status():
 
     data = load_json(
         RANDOM_FILE,
@@ -345,23 +411,25 @@ def load_random_status():
         }
     )
 
-    if not isinstance(
-        data,
-        dict
-    ):
+    if not isinstance(data, dict):
 
-        return {
-            "enabled": False
-        }
+        return False
 
-    return data
+    return bool(
+        data.get(
+            "enabled",
+            False
+        )
+    )
 
 
-def save_random_status(data):
+def set_random_status(status):
 
     save_json(
         RANDOM_FILE,
-        data
+        {
+            "enabled": status
+        }
     )
 
 
@@ -393,7 +461,9 @@ class AdminStates(StatesGroup):
 def main_admin_keyboard():
 
     return ReplyKeyboardMarkup(
+
         keyboard=[
+
             [
                 KeyboardButton(
                     text="➕ Kanal qo‘shish"
@@ -402,11 +472,13 @@ def main_admin_keyboard():
                     text="❌ Kanalni o‘chirish"
                 )
             ],
+
             [
                 KeyboardButton(
                     text="📋 Kanallar ro‘yxati"
                 )
             ],
+
             [
                 KeyboardButton(
                     text="👤 Admin qo‘shish"
@@ -415,6 +487,7 @@ def main_admin_keyboard():
                     text="🗑 Adminni o‘chirish"
                 )
             ],
+
             [
                 KeyboardButton(
                     text="🏆 Yutuq egasi"
@@ -423,6 +496,7 @@ def main_admin_keyboard():
                     text="🗑 Yutuq egasini o‘chirish"
                 )
             ],
+
             [
                 KeyboardButton(
                     text="🟢 Randomni yoqish"
@@ -431,12 +505,15 @@ def main_admin_keyboard():
                     text="🔴 Randomni o‘chirish"
                 )
             ],
+
             [
                 KeyboardButton(
                     text="📨 Xabar yuborish"
                 )
             ]
+
         ],
+
         resize_keyboard=True
     )
 
@@ -444,18 +521,17 @@ def main_admin_keyboard():
 def normal_admin_keyboard():
 
     return ReplyKeyboardMarkup(
+
         keyboard=[
+
             [
                 KeyboardButton(
                     text="🎲 Random yutuq egasi"
                 )
-            ],
-            [
-                KeyboardButton(
-                    text="👥 Qatnashuvchilar"
-                )
             ]
+
         ],
+
         resize_keyboard=True
     )
 
@@ -464,32 +540,43 @@ def normal_admin_keyboard():
 # USER KEYBOARD
 # =========================================================
 
-def get_user_keyboard(user_id):
+async def get_user_keyboard(user_id):
 
-    channels = load_channels()
+    items = load_channels()
 
     users = load_users()
 
-    user = users.get(
+    user_data = users.get(
         str(user_id),
         {}
     )
 
-    completed_channels = user.get(
+    completed = set()
+
+    for channel_id in user_data.get(
         "completed_channels",
         []
-    )
+    ):
 
-    buttons = []
+        try:
 
-    for item in channels:
+            completed.add(
+                int(channel_id)
+            )
 
-        item_type = item.get(
-            "type"
-        )
+        except:
 
+            pass
+
+    keyboard = []
+
+    for item in items:
+
+        # =================================================
         # CHANNEL
-        if item_type == "channel":
+        # =================================================
+
+        if item.get("type") == "channel":
 
             try:
 
@@ -497,11 +584,12 @@ def get_user_keyboard(user_id):
                     item.get("id")
                 )
 
-            except Exception:
+            except:
 
                 continue
 
-            if channel_id in completed_channels:
+            if channel_id in completed:
+
                 continue
 
             name = item.get(
@@ -514,20 +602,22 @@ def get_user_keyboard(user_id):
                 ""
             )
 
-            if not link:
-                continue
+            if link:
 
-            buttons.append(
-                [
+                keyboard.append([
+
                     InlineKeyboardButton(
                         text=f"📢 {name}",
                         url=link
                     )
-                ]
-            )
 
+                ])
+
+        # =================================================
         # BOT
-        elif item_type == "bot":
+        # =================================================
+
+        elif item.get("type") == "bot":
 
             name = item.get(
                 "name",
@@ -539,165 +629,28 @@ def get_user_keyboard(user_id):
                 ""
             )
 
-            if not link:
-                continue
+            if link:
 
-            buttons.append(
-                [
+                keyboard.append([
+
                     InlineKeyboardButton(
                         text=f"🤖 {name}",
                         url=link
                     )
-                ]
-            )
 
-    buttons.append(
-        [
-            InlineKeyboardButton(
-                text="✅ Tekshirish",
-                callback_data="check_channels"
-            )
-        ]
-    )
+                ])
 
-    return InlineKeyboardMarkup(
-        inline_keyboard=buttons
-    )
+    keyboard.append([
 
-
-# =========================================================
-# KANALLARNI TEKSHIRISH
-# =========================================================
-
-async def check_channels_for_user(user_id):
-
-    channels = load_channels()
-
-    users = load_users()
-
-    requests = load_requests()
-
-    mandatory_channels = []
-
-    for item in channels:
-
-        if item.get("type") != "channel":
-            continue
-
-        try:
-
-            channel_id = int(
-                item.get("id")
-            )
-
-            mandatory_channels.append(
-                channel_id
-            )
-
-        except Exception:
-            pass
-
-    if not mandatory_channels:
-
-        return True
-
-    user_key = str(
-        user_id
-    )
-
-    requested_channels = requests.get(
-        user_key,
-        []
-    )
-
-    if not isinstance(
-        requested_channels,
-        list
-    ):
-
-        requested_channels = []
-
-    requested_set = set()
-
-    for channel_id in requested_channels:
-
-        try:
-
-            requested_set.add(
-                int(channel_id)
-            )
-
-        except Exception:
-            pass
-
-    completed_channels = []
-
-    for channel_id in mandatory_channels:
-
-        passed = (
-            channel_id in requested_set
+        InlineKeyboardButton(
+            text="✅ Tekshirish",
+            callback_data="check_subscription"
         )
 
-        if not passed:
+    ])
 
-            try:
-
-                member = await bot.get_chat_member(
-                    chat_id=channel_id,
-                    user_id=user_id
-                )
-
-                if member.status in [
-                    "member",
-                    "administrator",
-                    "creator"
-                ]:
-
-                    passed = True
-
-                elif (
-                    member.status == "restricted"
-                    and getattr(
-                        member,
-                        "is_member",
-                        False
-                    )
-                ):
-
-                    passed = True
-
-            except Exception as e:
-
-                print(
-                    f"CHECK ERROR {channel_id}: {e}"
-                )
-
-        if passed:
-
-            completed_channels.append(
-                channel_id
-            )
-
-    if user_key not in users:
-
-        users[user_key] = {
-            "id": user_id,
-            "first_name": "",
-            "username": "",
-            "completed_channels": []
-        }
-
-    users[user_key][
-        "completed_channels"
-    ] = completed_channels
-
-    save_users(
-        users
-    )
-
-    return (
-        len(completed_channels)
-        == len(mandatory_channels)
+    return InlineKeyboardMarkup(
+        inline_keyboard=keyboard
     )
 
 
@@ -721,39 +674,77 @@ async def start_handler(
 
     user_id = message.from_user.id
 
+    # =====================================================
     # MAIN ADMIN
+    # =====================================================
+
     if user_id == ADMIN_ID:
 
         await message.answer(
-            "👑 <b>ASOSIY ADMIN PANEL</b>\n\n"
-            "Kerakli amalni tanlang.",
-            parse_mode="HTML",
+
+            "👑 Asosiy admin panel",
+
             reply_markup=main_admin_keyboard()
+
         )
 
         return
 
-    # NORMAL ADMIN
+    # =====================================================
+    # ADDED ADMIN
+    # =====================================================
+
     if user_id in load_admins():
 
         await message.answer(
-            "🛡 <b>ADMIN PANEL</b>",
-            parse_mode="HTML",
+
+            "👤 Admin panel",
+
             reply_markup=normal_admin_keyboard()
+
         )
 
         return
 
+    # =====================================================
     # USER
+    # =====================================================
+
+    channels = [
+
+        item
+
+        for item in load_channels()
+
+        if item.get("type") == "channel"
+
+    ]
+
+    if not channels:
+
+        await message.answer(
+
+            "🎉 TABRIKLAYMIZ!\n\n"
+
+            "Konkursda qatnashishingiz mumkin."
+
+        )
+
+        return
+
     await message.answer(
-        "🎁 <b>KONKURSDA QATNASHISH UCHUN</b>\n\n"
-        "Quyidagi kanallarga qo‘shiling "
-        "yoki Join Request yuboring.\n\n"
-        "Keyin <b>✅ Tekshirish</b> tugmasini bosing.",
-        parse_mode="HTML",
-        reply_markup=get_user_keyboard(
+
+        "🏆 KONKURSDA QATNASHISH UCHUN\n\n"
+
+        "Quyidagi barcha kanallarga obuna bo‘ling.\n\n"
+
+        "Shundan keyin «✅ Tekshirish» "
+        "tugmasini bosing.",
+
+        reply_markup=await get_user_keyboard(
             user_id
         )
+
     )
 
 
@@ -769,10 +760,6 @@ async def join_request_handler(
     user_id = request.from_user.id
 
     channel_id = request.chat.id
-
-    print(
-        f"JOIN REQUEST: user={user_id}, channel={channel_id}"
-    )
 
     requests = load_requests()
 
@@ -801,63 +788,296 @@ async def join_request_handler(
         requests
     )
 
-    add_user(
-        request.from_user
+
+# =========================================================
+# CHANNEL CHECK
+# =========================================================
+
+async def check_channels_for_user(
+    user_id
+):
+
+    items = load_channels()
+
+    users = load_users()
+
+    requests = load_requests()
+
+    key = str(
+        user_id
     )
+
+    if key not in users:
+
+        users[key] = {
+
+            "id": user_id,
+
+            "first_name": "",
+
+            "username": "",
+
+            "completed_channels": []
+
+        }
+
+    if "completed_channels" not in users[key]:
+
+        users[key]["completed_channels"] = []
+
+    # =====================================================
+    # OLDIN BAJARILGAN KANALLAR
+    # =====================================================
+
+    completed = set()
+
+    for channel_id in users[key][
+        "completed_channels"
+    ]:
+
+        try:
+
+            completed.add(
+                int(channel_id)
+            )
+
+        except:
+
+            pass
+
+    # =====================================================
+    # JOIN REQUEST
+    # =====================================================
+
+    user_requests = requests.get(
+        key,
+        []
+    )
+
+    if not isinstance(
+        user_requests,
+        list
+    ):
+
+        user_requests = []
+
+    request_channels = set()
+
+    for channel_id in user_requests:
+
+        try:
+
+            request_channels.add(
+                int(channel_id)
+            )
+
+        except:
+
+            pass
+
+    # =====================================================
+    # HAR BIR CHANNEL
+    # =====================================================
+
+    for item in items:
+
+        if item.get(
+            "type"
+        ) != "channel":
+
+            continue
+
+        try:
+
+            channel_id = int(
+                item.get("id")
+            )
+
+        except:
+
+            continue
+
+        if channel_id in completed:
+
+            continue
+
+        passed = False
+
+        # =================================================
+        # JOIN REQUEST
+        # =================================================
+
+        if channel_id in request_channels:
+
+            passed = True
+
+        # =================================================
+        # REAL MEMBERSHIP
+        # =================================================
+
+        if not passed:
+
+            try:
+
+                member = await bot.get_chat_member(
+
+                    chat_id=channel_id,
+
+                    user_id=user_id
+
+                )
+
+                status = member.status
+
+                if status in [
+
+                    "member",
+                    "administrator",
+                    "creator"
+
+                ]:
+
+                    passed = True
+
+                elif (
+
+                    status == "restricted"
+
+                    and getattr(
+                        member,
+                        "is_member",
+                        False
+                    )
+
+                ):
+
+                    passed = True
+
+            except Exception:
+
+                passed = False
+
+        if passed:
+
+            completed.add(
+                channel_id
+            )
+
+    # =====================================================
+    # SAQLASH
+    # =====================================================
+
+    users[key][
+        "completed_channels"
+    ] = list(
+        completed
+    )
+
+    save_users(
+        users
+    )
+
+    # =====================================================
+    # QOLGAN KANALLAR
+    # =====================================================
+
+    remaining = []
+
+    for item in items:
+
+        if item.get(
+            "type"
+        ) != "channel":
+
+            continue
+
+        try:
+
+            channel_id = int(
+                item.get("id")
+            )
+
+        except:
+
+            continue
+
+        if channel_id not in completed:
+
+            remaining.append(
+                item
+            )
+
+    return len(
+        remaining
+    ) == 0
 
 
 # =========================================================
-# CHECK
+# CHECK BUTTON
 # =========================================================
 
 @dp.callback_query(
     lambda callback:
-    callback.data == "check_channels"
+    callback.data == "check_subscription"
 )
-async def check_button_handler(
+async def check_subscription(
     callback: CallbackQuery
 ):
 
     user_id = callback.from_user.id
 
-    result = await check_channels_for_user(
+    all_done = await check_channels_for_user(
         user_id
     )
 
-    if result:
-
-        await callback.message.edit_text(
-            "🎉 <b>TABRIKLAYMIZ!</b>\n\n"
-            "Siz barcha shartlarni bajardingiz. ✅\n\n"
-            "Endi konkursda qatnashyapsiz! 🔥",
-            parse_mode="HTML"
-        )
+    if all_done:
 
         await callback.answer(
-            "✅ Barcha shartlar bajarildi!"
+            "🎉 Barcha shartlar bajarildi!",
+            show_alert=True
         )
 
+        try:
+
+            await callback.message.edit_text(
+
+                "🎉 TABRIKLAYMIZ!\n\n"
+
+                "Siz konkursda qatnashish uchun "
+                "barcha shartlarni bajardingiz. ✅\n\n"
+
+                "Omad tilaymiz! 🏆"
+
+            )
+
+        except:
+
+            pass
+
         return
+
+    await callback.answer(
+        "✅ Bajarilgan kanallar olib tashlandi!",
+        show_alert=True
+    )
 
     try:
 
         await callback.message.edit_reply_markup(
-            reply_markup=get_user_keyboard(
+
+            reply_markup=await get_user_keyboard(
                 user_id
             )
+
         )
 
-    except Exception:
-        pass
+    except:
 
-    await callback.answer(
-        "❌ Hali barcha shartlar bajarilmagan!",
-        show_alert=True
-    )
+        pass
 
 
 # =========================================================
-# ➕ KANAL QO‘SHISH
+# ➕ KANAL QO'SHISH
 # =========================================================
 
 @dp.message(
@@ -877,17 +1097,20 @@ async def add_channel_start(
     )
 
     await message.answer(
-        "➕ <b>KANAL YOKI BOT QO‘SHISH</b>\n\n"
-        "📢 <b>Kanal uchun</b> kanal ID yuboring:\n"
-        "<code>-1001234567890</code>\n\n"
-        "🤖 <b>Bot uchun</b> link yuboring:\n"
-        "<code>https://t.me/MyBot</code>",
-        parse_mode="HTML"
+
+        "➕ KANAL YOKI BOT QO‘SHISH\n\n"
+
+        "📢 Kanal uchun kanal ID yuboring:\n"
+        "-1001234567890\n\n"
+
+        "🤖 Bot uchun link yuboring:\n"
+        "https://t.me/MyBot"
+
     )
 
 
 # =========================================================
-# KANAL ID QABUL QILISH
+# CHANNEL ID / BOT LINK
 # =========================================================
 
 @dp.message(
@@ -902,10 +1125,43 @@ async def channel_id_process(
         message.text or ""
     ).strip()
 
-    # BOT LINK
+    # Agar boshqa admin tugmasi bosilsa
+    if text in [
+
+        "➕ Kanal qo‘shish",
+        "❌ Kanalni o‘chirish",
+        "📋 Kanallar ro‘yxati",
+        "👤 Admin qo‘shish",
+        "🗑 Adminni o‘chirish",
+        "🏆 Yutuq egasi",
+        "🗑 Yutuq egasini o‘chirish",
+        "🟢 Randomni yoqish",
+        "🔴 Randomni o‘chirish",
+        "📨 Xabar yuborish"
+
+    ]:
+
+        await state.clear()
+
+        await message.answer(
+            "⚙️ Oldingi amal bekor qilindi.\n"
+            "Endi tanlagan tugmangizni qaytadan bosing.",
+            reply_markup=main_admin_keyboard()
+        )
+
+        return
+
+    # =====================================================
+    # BOT
+    # =====================================================
+
     bot_match = re.match(
-        r"^(?:https?://)?t\.me/([A-Za-z0-9_]+)$",
+
+        r"^(?:https?://)?t\.me/"
+        r"([A-Za-z0-9_]+)$",
+
         text
+
     )
 
     if bot_match:
@@ -914,198 +1170,223 @@ async def channel_id_process(
             1
         )
 
-        channels = load_channels()
+        link = (
+            f"https://t.me/{username}"
+        )
 
-        for item in channels:
+        items = load_channels()
+
+        for item in items:
 
             if (
+
                 item.get("type") == "bot"
-                and item.get(
-                    "username",
-                    ""
-                ).lower()
-                == username.lower()
+
+                and item.get("link") == link
+
             ):
+
+                await message.answer(
+                    "❌ Bu bot allaqachon qo‘shilgan."
+                )
 
                 await state.clear()
 
-                await message.answer(
-                    "⚠️ Bu bot allaqachon qo‘shilgan.",
-                    reply_markup=main_admin_keyboard()
-                )
-
                 return
 
-        channels.append(
-            {
-                "type": "bot",
-                "name": f"@{username}",
-                "username": username,
-                "link": f"https://t.me/{username}"
-            }
-        )
+        items.append({
+
+            "type": "bot",
+
+            "name": f"@{username}",
+
+            "username": username,
+
+            "link": link
+
+        })
 
         save_channels(
-            channels
+            items
         )
 
         await state.clear()
 
         await message.answer(
-            "✅ <b>BOT QO‘SHILDI!</b>\n\n"
-            f"🤖 @{username}",
-            parse_mode="HTML",
+
+            "✅ BOT QO‘SHILDI!\n\n"
+
+            f"🤖 @{username}\n"
+
+            f"🔗 {link}\n\n"
+
+            "ℹ️ Bot tekshirilmaydi.",
+
             reply_markup=main_admin_keyboard()
+
         )
 
         return
 
+    # =====================================================
     # CHANNEL ID
+    # =====================================================
+
     try:
 
         channel_id = int(
             text
         )
 
-    except Exception:
+    except:
 
         await message.answer(
-            "❌ Noto‘g‘ri format.\n\n"
-            "Kanal ID misol:\n"
-            "<code>-1001234567890</code>",
-            parse_mode="HTML"
+
+            "❌ Noto‘g‘ri Telegram ID.\n\n"
+
+            "Kanal ID yuboring.\n"
+            "Masalan:\n"
+            "-1001234567890"
+
         )
 
         return
 
-    # TELEGRAM'DAN KANALNI OLISH
+    # =====================================================
+    # GET CHAT
+    # =====================================================
+
     try:
 
         chat = await bot.get_chat(
             channel_id
         )
 
-    except Exception as e:
-
-        print(
-            f"GET CHAT ERROR: {e}"
+        channel_name = (
+            chat.title
+            or "Kanal"
         )
 
-        await message.answer(
-            "❌ Kanal topilmadi.\n\n"
-            "Tekshiring:\n"
-            "• Kanal ID to‘g‘ri yozilganmi?\n"
-            "• Bot kanalga admin qilinganmi?\n"
-            "• Bot kanalni ko‘ra oladimi?"
-        )
+        # =================================================
+        # PUBLIC
+        # =================================================
 
-        return
+        if chat.username:
 
-    channel_name = (
-        chat.title
-        or "Kanal"
-    )
-
-    print(
-        f"KANAL TOPILDI: {channel_name} | {channel_id}"
-    )
-
-    channels = load_channels()
-
-    # DUPLICATE
-    for item in channels:
-
-        if item.get(
-            "type"
-        ) != "channel":
-
-            continue
-
-        try:
-
-            old_id = int(
-                item.get("id")
+            link = (
+                f"https://t.me/"
+                f"{chat.username}"
             )
 
-        except Exception:
+            items = load_channels()
 
-            continue
+            for item in items:
 
-        if old_id == channel_id:
+                if item.get(
+                    "type"
+                ) != "channel":
+
+                    continue
+
+                try:
+
+                    old_id = int(
+                        item.get("id")
+                    )
+
+                except:
+
+                    continue
+
+                if old_id == channel_id:
+
+                    await message.answer(
+                        "❌ Bu kanal allaqachon qo‘shilgan."
+                    )
+
+                    await state.clear()
+
+                    return
+
+            items.append({
+
+                "type": "channel",
+
+                "id": channel_id,
+
+                "name": channel_name,
+
+                "link": link
+
+            })
+
+            save_channels(
+                items
+            )
 
             await state.clear()
 
             await message.answer(
-                "⚠️ Bu kanal allaqachon "
-                "kanallar ro‘yxatida mavjud.",
+
+                "✅ PUBLIC KANAL QO‘SHILDI!\n\n"
+
+                f"📢 {channel_name}\n"
+
+                f"🆔 {channel_id}\n"
+
+                f"🔗 {link}",
+
                 reply_markup=main_admin_keyboard()
+
             )
 
             return
 
-    # =====================================================
-    # PUBLIC CHANNEL
-    # =====================================================
+        # =================================================
+        # PRIVATE
+        # =================================================
 
-    if chat.username:
+        await state.update_data(
 
-        link = (
-            f"https://t.me/{chat.username}"
+            channel_id=channel_id,
+
+            channel_name=channel_name
+
         )
 
-        channels.append(
-            {
-                "type": "channel",
-                "id": channel_id,
-                "name": channel_name,
-                "link": link
-            }
+        await state.set_state(
+            AdminStates.waiting_channel_link
         )
-
-        save_channels(
-            channels
-        )
-
-        await state.clear()
 
         await message.answer(
-            "✅ <b>PUBLIC KANAL QO‘SHILDI!</b>\n\n"
+
+            "🔒 PRIVATE KANAL ANIQLANDI!\n\n"
+
             f"📢 {channel_name}\n"
-            f"🆔 <code>{channel_id}</code>\n"
-            f"🔗 {link}",
-            parse_mode="HTML",
-            reply_markup=main_admin_keyboard()
+
+            f"🆔 {channel_id}\n\n"
+
+            "Join Request invite linkini yuboring.\n\n"
+
+            "Misol:\n"
+            "https://t.me/+AbCdEf123456"
+
         )
 
-        return
+    except Exception:
 
-    # =====================================================
-    # PRIVATE CHANNEL
-    # =====================================================
+        await message.answer(
 
-    await state.update_data(
-        channel_id=channel_id,
-        channel_name=channel_name
-    )
+            "❌ Kanal topilmadi.\n\n"
 
-    await state.set_state(
-        AdminStates.waiting_channel_link
-    )
+            "Bot kanalga admin qilinganini "
+            "tekshiring."
 
-    await message.answer(
-        "🔒 <b>PRIVATE KANAL ANIQLANDI!</b>\n\n"
-        f"📢 {channel_name}\n"
-        f"🆔 <code>{channel_id}</code>\n\n"
-        "Endi private kanalning "
-        "<b>Join Request invite link</b>ini yuboring.\n\n"
-        "Masalan:\n"
-        "<code>https://t.me/+AbCdEf123456</code>",
-        parse_mode="HTML"
-    )
+        )
 
 
 # =========================================================
-# 🔒 PRIVATE CHANNEL LINK
+# PRIVATE CHANNEL LINK
 # =========================================================
 
 @dp.message(
@@ -1120,78 +1401,49 @@ async def private_channel_link_process(
         message.text or ""
     ).strip()
 
-    print(
-        f"PRIVATE LINK QABUL QILINDI: {text}"
-    )
+    # Boshqa admin tugmasi
+    if text in [
 
-    if not text:
+        "➕ Kanal qo‘shish",
+        "❌ Kanalni o‘chirish",
+        "📋 Kanallar ro‘yxati",
+        "👤 Admin qo‘shish",
+        "🗑 Adminni o‘chirish",
+        "🏆 Yutuq egasi",
+        "🗑 Yutuq egasini o‘chirish",
+        "🟢 Randomni yoqish",
+        "🔴 Randomni o‘chirish",
+        "📨 Xabar yuborish"
+
+    ]:
+
+        await state.clear()
 
         await message.answer(
-            "❌ Link yuboring."
+            "⚙️ Oldingi amal bekor qilindi.",
+            reply_markup=main_admin_keyboard()
         )
 
         return
 
-    # Oxiridagi / belgini olib tashlaymiz
-    link = text.rstrip("/")
+    if not re.match(
 
-    # =====================================================
-    # LINK TEKSHIRISH
-    # =====================================================
+        r"^https://t\.me/\+[A-Za-z0-9_-]+$",
 
-    valid_link = False
+        text
 
-    # https://t.me/+XXXX
-    if re.match(
-        r"^https?://t\.me/\+[A-Za-z0-9_-]+$",
-        link
     ):
-        valid_link = True
-
-    # t.me/+XXXX
-    elif re.match(
-        r"^t\.me/\+[A-Za-z0-9_-]+$",
-        link
-    ):
-        valid_link = True
-
-    # https://t.me/joinchat/XXXX
-    elif re.match(
-        r"^https?://t\.me/joinchat/[A-Za-z0-9_-]+$",
-        link
-    ):
-        valid_link = True
-
-    # t.me/joinchat/XXXX
-    elif re.match(
-        r"^t\.me/joinchat/[A-Za-z0-9_-]+$",
-        link
-    ):
-        valid_link = True
-
-    # https://telegram.me/+XXXX
-    elif re.match(
-        r"^https?://telegram\.me/\+[A-Za-z0-9_-]+$",
-        link
-    ):
-        valid_link = True
-
-    if not valid_link:
 
         await message.answer(
-            "❌ <b>Private kanal linki noto‘g‘ri.</b>\n\n"
-            "Quyidagi ko‘rinishda yuboring:\n\n"
-            "<code>https://t.me/+AbCdEf123456</code>\n\n"
-            "yoki:\n\n"
-            "<code>https://t.me/joinchat/AbCdEf123456</code>",
-            parse_mode="HTML"
+
+            "❌ Join Request link noto‘g‘ri.\n\n"
+
+            "Misol:\n"
+            "https://t.me/+AbCdEf123456"
+
         )
 
         return
-
-    # =====================================================
-    # OLDINGI KANAL MA'LUMOTLARI
-    # =====================================================
 
     data = await state.get_data()
 
@@ -1204,37 +1456,9 @@ async def private_channel_link_process(
         "Kanal"
     )
 
-    print(
-        f"PRIVATE CHANNEL ID: {channel_id}"
-    )
+    items = load_channels()
 
-    print(
-        f"PRIVATE CHANNEL NAME: {channel_name}"
-    )
-
-    if not channel_id:
-
-        await state.clear()
-
-        await message.answer(
-            "❌ Kanal ma'lumotlari topilmadi.\n\n"
-            "Kanalni boshidan qaytadan qo‘shing.",
-            reply_markup=main_admin_keyboard()
-        )
-
-        return
-
-    # =====================================================
-    # KANALLARNI OLISH
-    # =====================================================
-
-    channels = load_channels()
-
-    # =====================================================
-    # DUPLICATE TEKSHIRISH
-    # =====================================================
-
-    for item in channels:
+    for item in items:
 
         if item.get(
             "type"
@@ -1248,144 +1472,57 @@ async def private_channel_link_process(
                 item.get("id")
             )
 
-        except Exception:
+        except:
 
             continue
 
-        if old_id == int(channel_id):
+        if old_id == int(
+            channel_id
+        ):
+
+            await message.answer(
+                "❌ Bu kanal allaqachon qo‘shilgan."
+            )
 
             await state.clear()
 
-            await message.answer(
-                "⚠️ Bu kanal allaqachon "
-                "ro‘yxatda mavjud.",
-                reply_markup=main_admin_keyboard()
-            )
-
             return
 
-    # =====================================================
-    # PRIVATE KANALNI SAQLASH
-    # =====================================================
+    items.append({
 
-    new_channel = {
         "type": "channel",
+
         "id": int(channel_id),
+
         "name": channel_name,
-        "link": link
-    }
 
-    channels.append(
-        new_channel
+        "link": text
+
+    })
+
+    save_channels(
+        items
     )
-
-    try:
-
-        save_channels(
-            channels
-        )
-
-        print(
-            "PRIVATE KANAL MUVAFFAQIYATLI SAQLANDI"
-        )
-
-        print(
-            new_channel
-        )
-
-    except Exception as e:
-
-        print(
-            f"SAVE CHANNEL ERROR: {e}"
-        )
-
-        await message.answer(
-            f"❌ Kanalni saqlashda xatolik:\n{e}"
-        )
-
-        return
-
-    # =====================================================
-    # TAYYOR
-    # =====================================================
 
     await state.clear()
 
     await message.answer(
-        "🎉 <b>PRIVATE KANAL MUVAFFAQIYATLI QO‘SHILDI!</b>\n\n"
+
+        "✅ PRIVATE KANAL QO‘SHILDI!\n\n"
+
         f"📢 {channel_name}\n"
-        f"🆔 <code>{channel_id}</code>\n"
-        f"🔗 {link}\n\n"
-        "✅ Kanal <b>channels.json</b> fayliga saqlandi.",
-        parse_mode="HTML",
+
+        f"🆔 {channel_id}\n"
+
+        f"🔗 {text}",
+
         reply_markup=main_admin_keyboard()
+
     )
 
 
 # =========================================================
-# 📋 KANALLAR RO‘YXATI
-# =========================================================
-
-@dp.message(
-    lambda message:
-    message.text == "📋 Kanallar ro‘yxati"
-    and message.from_user.id == ADMIN_ID
-)
-async def channels_list_handler(
-    message: Message,
-    state: FSMContext
-):
-
-    await state.clear()
-
-    channels = load_channels()
-
-    if not channels:
-
-        await message.answer(
-            "📭 Hozircha kanallar yo‘q.",
-            reply_markup=main_admin_keyboard()
-        )
-
-        return
-
-    text = (
-        "📋 <b>KANALLAR RO‘YXATI</b>\n\n"
-    )
-
-    for index, item in enumerate(
-        channels,
-        1
-    ):
-
-        item_type = item.get(
-            "type"
-        )
-
-        if item_type == "channel":
-
-            text += (
-                f"{index}. 📢 <b>{item.get('name', 'Kanal')}</b>\n"
-                f"🆔 <code>{item.get('id')}</code>\n"
-                f"🔗 {item.get('link', '')}\n\n"
-            )
-
-        elif item_type == "bot":
-
-            text += (
-                f"{index}. 🤖 <b>{item.get('name', 'Bot')}</b>\n"
-                f"🔗 {item.get('link', '')}\n\n"
-            )
-
-    await message.answer(
-        text,
-        parse_mode="HTML",
-        reply_markup=main_admin_keyboard()
-    )
-
-
-# =========================================================
-# ❌ KANAL O‘CHIRISH
+# ❌ KANAL O'CHIRISH
 # =========================================================
 
 @dp.message(
@@ -1400,53 +1537,57 @@ async def delete_channel_start(
 
     await state.clear()
 
-    channels = load_channels()
+    items = load_channels()
 
-    channel_list = []
-
-    for item in channels:
-
-        if item.get(
-            "type"
-        ) == "channel":
-
-            channel_list.append(
-                item
-            )
-
-    if not channel_list:
+    if not items:
 
         await message.answer(
-            "📭 O‘chirish uchun kanal yo‘q.",
-            reply_markup=main_admin_keyboard()
+            "📭 Kanal yoki bot yo‘q."
         )
 
         return
 
     text = (
-        "❌ <b>KANAL O‘CHIRISH</b>\n\n"
+        "❌ KANAL / BOT O‘CHIRISH\n\n"
     )
 
-    for item in channel_list:
+    for index, item in enumerate(
+        items,
+        1
+    ):
 
-        text += (
-            f"📢 {item.get('name', 'Kanal')}\n"
-            f"🆔 <code>{item.get('id')}</code>\n\n"
-        )
+        if item.get(
+            "type"
+        ) == "channel":
 
-    text += (
-        "O‘chirmoqchi bo‘lgan kanal ID'sini yuboring."
-    )
+            text += (
+
+                f"{index}. 📢 {item.get('name')}\n"
+                f"ID: {item.get('id')}\n\n"
+
+            )
+
+        else:
+
+            text += (
+
+                f"{index}. 🤖 {item.get('name')}\n"
+                f"Link: {item.get('link')}\n\n"
+
+            )
 
     await state.set_state(
         AdminStates.waiting_delete_channel
     )
 
     await message.answer(
-        text,
-        parse_mode="HTML"
+        text
     )
 
+
+# =========================================================
+# DELETE CHANNEL
+# =========================================================
 
 @dp.message(
     AdminStates.waiting_delete_channel
@@ -1460,84 +1601,179 @@ async def delete_channel_process(
         message.text or ""
     ).strip()
 
-    try:
+    # Boshqa admin tugmasi
+    if text in [
 
-        channel_id = int(
-            text
-        )
+        "➕ Kanal qo‘shish",
+        "❌ Kanalni o‘chirish",
+        "📋 Kanallar ro‘yxati",
+        "👤 Admin qo‘shish",
+        "🗑 Adminni o‘chirish",
+        "🏆 Yutuq egasi",
+        "🗑 Yutuq egasini o‘chirish",
+        "🟢 Randomni yoqish",
+        "🔴 Randomni o‘chirish",
+        "📨 Xabar yuborish"
 
-    except Exception:
+    ]:
+
+        await state.clear()
 
         await message.answer(
-            "❌ Kanal ID noto‘g‘ri."
+            "⚙️ Oldingi amal bekor qilindi.",
+            reply_markup=main_admin_keyboard()
         )
 
         return
 
-    channels = load_channels()
+    items = load_channels()
 
-    new_channels = []
+    new_items = []
 
-    found = False
+    deleted = None
 
-    for item in channels:
+    for item in items:
 
         if item.get(
             "type"
-        ) != "channel":
+        ) == "channel":
 
-            new_channels.append(
-                item
+            try:
+
+                if int(text) == int(
+                    item.get("id")
+                ):
+
+                    deleted = item
+
+                    continue
+
+            except:
+
+                pass
+
+        elif item.get(
+            "type"
+        ) == "bot":
+
+            username = item.get(
+                "username",
+                ""
             )
 
-            continue
-
-        try:
-
-            item_id = int(
-                item.get("id")
+            link = item.get(
+                "link",
+                ""
             )
 
-        except Exception:
+            if (
 
-            new_channels.append(
-                item
-            )
+                text == username
+                or text == f"@{username}"
+                or text == link
 
-            continue
+            ):
 
-        if item_id == channel_id:
+                deleted = item
 
-            found = True
+                continue
 
-        else:
+        new_items.append(
+            item
+        )
 
-            new_channels.append(
-                item
-            )
-
-    if not found:
+    if deleted is None:
 
         await message.answer(
-            "❌ Bu kanal topilmadi."
+            "❌ Kanal yoki bot topilmadi."
         )
+
+        await state.clear()
 
         return
 
     save_channels(
-        new_channels
+        new_items
     )
 
     await state.clear()
 
     await message.answer(
-        "✅ Kanal o‘chirildi.",
+
+        "✅ O‘CHIRILDI!\n\n"
+
+        f"{deleted.get('name')}",
+
         reply_markup=main_admin_keyboard()
+
     )
 
 
 # =========================================================
-# 👤 ADMIN QO‘SHISH
+# 📋 RO'YXAT
+# =========================================================
+
+@dp.message(
+    lambda message:
+    message.text == "📋 Kanallar ro‘yxati"
+    and message.from_user.id == ADMIN_ID
+)
+async def channels_list(
+    message: Message,
+    state: FSMContext
+):
+
+    await state.clear()
+
+    items = load_channels()
+
+    if not items:
+
+        await message.answer(
+            "📭 Kanal yoki bot yo‘q."
+        )
+
+        return
+
+    text = (
+        "📋 KANALLAR / BOTLAR\n\n"
+    )
+
+    for index, item in enumerate(
+        items,
+        1
+    ):
+
+        if item.get(
+            "type"
+        ) == "channel":
+
+            text += (
+
+                f"{index}. 📢 KANAL\n"
+                f"Nom: {item.get('name')}\n"
+                f"ID: {item.get('id')}\n"
+                f"Link: {item.get('link') or 'Yo‘q'}\n\n"
+
+            )
+
+        else:
+
+            text += (
+
+                f"{index}. 🤖 BOT\n"
+                f"Nom: {item.get('name')}\n"
+                f"Link: {item.get('link')}\n\n"
+
+            )
+
+    await message.answer(
+        text
+    )
+
+
+# =========================================================
+# 👤 ADMIN QO'SHISH
 # =========================================================
 
 @dp.message(
@@ -1557,12 +1793,13 @@ async def add_admin_start(
     )
 
     await message.answer(
-        "👤 Yangi admin Telegram ID'sini yuboring.\n\n"
-        "Masalan:\n"
-        "<code>123456789</code>",
-        parse_mode="HTML"
+        "👤 Admin Telegram ID yuboring:"
     )
 
+
+# =========================================================
+# ADD ADMIN PROCESS
+# =========================================================
 
 @dp.message(
     AdminStates.waiting_admin
@@ -1572,28 +1809,64 @@ async def add_admin_process(
     state: FSMContext
 ):
 
+    text = (
+        message.text or ""
+    ).strip()
+
+    # =====================================================
+    # BOSHQA ADMIN TUGMASI BOSILSA
+    # =====================================================
+
+    if text in [
+
+        "➕ Kanal qo‘shish",
+        "❌ Kanalni o‘chirish",
+        "📋 Kanallar ro‘yxati",
+        "👤 Admin qo‘shish",
+        "🗑 Adminni o‘chirish",
+        "🏆 Yutuq egasi",
+        "🗑 Yutuq egasini o‘chirish",
+        "🟢 Randomni yoqish",
+        "🔴 Randomni o‘chirish",
+        "📨 Xabar yuborish"
+
+    ]:
+
+        await state.clear()
+
+        await message.answer(
+            "⚙️ Oldingi amal bekor qilindi.",
+            reply_markup=main_admin_keyboard()
+        )
+
+        return
+
     try:
 
         user_id = int(
-            (message.text or "").strip()
+            text
         )
 
-    except Exception:
+    except:
 
         await message.answer(
-            "❌ ID noto‘g‘ri."
+
+            "❌ Noto‘g‘ri Telegram ID.\n\n"
+
+            "Masalan:\n"
+            "123456789"
+
         )
 
         return
 
     if user_id == ADMIN_ID:
 
-        await state.clear()
-
         await message.answer(
-            "❌ Bu asosiy admin.",
-            reply_markup=main_admin_keyboard()
+            "❌ Bu asosiy admin."
         )
+
+        await state.clear()
 
         return
 
@@ -1601,12 +1874,11 @@ async def add_admin_process(
 
     if user_id in admins:
 
-        await state.clear()
-
         await message.answer(
-            "⚠️ Bu foydalanuvchi allaqachon admin.",
-            reply_markup=main_admin_keyboard()
+            "❌ Bu user allaqachon admin."
         )
+
+        await state.clear()
 
         return
 
@@ -1621,13 +1893,18 @@ async def add_admin_process(
     await state.clear()
 
     await message.answer(
-        "✅ Admin qo‘shildi.",
+
+        "✅ ADMIN QO‘SHILDI!\n\n"
+
+        f"🆔 {user_id}",
+
         reply_markup=main_admin_keyboard()
+
     )
 
 
 # =========================================================
-# 🗑 ADMIN O‘CHIRISH
+# 🗑 ADMIN O'CHIRISH
 # =========================================================
 
 @dp.message(
@@ -1647,24 +1924,23 @@ async def delete_admin_start(
     if not admins:
 
         await message.answer(
-            "📭 Qo‘shimcha adminlar yo‘q.",
-            reply_markup=main_admin_keyboard()
+            "📭 Adminlar yo‘q."
         )
 
         return
 
     text = (
-        "🗑 <b>ADMINLAR</b>\n\n"
+        "🗑 ADMIN O‘CHIRISH\n\n"
     )
 
     for admin_id in admins:
 
         text += (
-            f"👤 <code>{admin_id}</code>\n"
+            f"👤 {admin_id}\n"
         )
 
     text += (
-        "\nO‘chirmoqchi bo‘lgan admin ID'sini yuboring."
+        "\nAdmin ID yuboring."
     )
 
     await state.set_state(
@@ -1672,10 +1948,13 @@ async def delete_admin_start(
     )
 
     await message.answer(
-        text,
-        parse_mode="HTML"
+        text
     )
 
+
+# =========================================================
+# DELETE ADMIN PROCESS
+# =========================================================
 
 @dp.message(
     AdminStates.waiting_delete_admin
@@ -1685,16 +1964,44 @@ async def delete_admin_process(
     state: FSMContext
 ):
 
+    text = (
+        message.text or ""
+    ).strip()
+
+    if text in [
+
+        "➕ Kanal qo‘shish",
+        "❌ Kanalni o‘chirish",
+        "📋 Kanallar ro‘yxati",
+        "👤 Admin qo‘shish",
+        "🗑 Adminni o‘chirish",
+        "🏆 Yutuq egasi",
+        "🗑 Yutuq egasini o‘chirish",
+        "🟢 Randomni yoqish",
+        "🔴 Randomni o‘chirish",
+        "📨 Xabar yuborish"
+
+    ]:
+
+        await state.clear()
+
+        await message.answer(
+            "⚙️ Oldingi amal bekor qilindi.",
+            reply_markup=main_admin_keyboard()
+        )
+
+        return
+
     try:
 
         user_id = int(
-            (message.text or "").strip()
+            text
         )
 
-    except Exception:
+    except:
 
         await message.answer(
-            "❌ ID noto‘g‘ri."
+            "❌ Noto‘g‘ri Telegram ID."
         )
 
         return
@@ -1706,6 +2013,8 @@ async def delete_admin_process(
         await message.answer(
             "❌ Bu admin topilmadi."
         )
+
+        await state.clear()
 
         return
 
@@ -1720,8 +2029,11 @@ async def delete_admin_process(
     await state.clear()
 
     await message.answer(
-        "✅ Admin o‘chirildi.",
+
+        "✅ ADMIN O‘CHIRILDI!",
+
         reply_markup=main_admin_keyboard()
+
     )
 
 
@@ -1746,12 +2058,13 @@ async def winner_start(
     )
 
     await message.answer(
-        "🏆 Yutuq egasining Telegram ID'sini yuboring.\n\n"
-        "Masalan:\n"
-        "<code>123456789</code>",
-        parse_mode="HTML"
+        "🏆 Yutuq egasi Telegram ID yuboring:"
     )
 
+
+# =========================================================
+# WINNER PROCESS
+# =========================================================
 
 @dp.message(
     AdminStates.waiting_winner
@@ -1761,36 +2074,69 @@ async def winner_process(
     state: FSMContext
 ):
 
-    try:
+    text = (
+        message.text or ""
+    ).strip()
 
-        user_id = int(
-            (message.text or "").strip()
-        )
+    if text in [
 
-    except Exception:
+        "➕ Kanal qo‘shish",
+        "❌ Kanalni o‘chirish",
+        "📋 Kanallar ro‘yxati",
+        "👤 Admin qo‘shish",
+        "🗑 Adminni o‘chirish",
+        "🏆 Yutuq egasi",
+        "🗑 Yutuq egasini o‘chirish",
+        "🟢 Randomni yoqish",
+        "🔴 Randomni o‘chirish",
+        "📨 Xabar yuborish"
+
+    ]:
+
+        await state.clear()
 
         await message.answer(
-            "❌ ID noto‘g‘ri."
+            "⚙️ Oldingi amal bekor qilindi.",
+            reply_markup=main_admin_keyboard()
         )
 
         return
 
-    save_winner(
-        {
-            "user_id": user_id
-        }
-    )
+    try:
+
+        user_id = int(
+            text
+        )
+
+    except:
+
+        await message.answer(
+            "❌ Noto‘g‘ri Telegram ID."
+        )
+
+        return
+
+    save_winner({
+
+        "user_id": user_id
+
+    })
 
     await state.clear()
 
     await message.answer(
-        "🏆 Yutuq egasi saqlandi.",
+
+        "🏆 YUTUQ EGASI BELGILANDI!\n\n"
+
+        f"🆔 {user_id}",
+
         reply_markup=main_admin_keyboard()
+
     )
 
 
 # =========================================================
-# 🗑 YUTUQ EGASINI O‘CHIRISH
+# 🗑 WINNER DELETE
 # =========================================================
 
 @dp.message(
@@ -1798,25 +2144,26 @@ async def winner_process(
     message.text == "🗑 Yutuq egasini o‘chirish"
     and message.from_user.id == ADMIN_ID
 )
-async def delete_winner_handler(
+async def delete_winner(
     message: Message,
     state: FSMContext
 ):
 
     await state.clear()
 
-    save_winner(
-        {}
-    )
+    save_winner({})
 
     await message.answer(
+
         "✅ Yutuq egasi o‘chirildi.",
+
         reply_markup=main_admin_keyboard()
+
     )
 
 
 # =========================================================
-# 🟢 RANDOM YOQISH
+# RANDOM ON
 # =========================================================
 
 @dp.message(
@@ -1824,27 +2171,28 @@ async def delete_winner_handler(
     message.text == "🟢 Randomni yoqish"
     and message.from_user.id == ADMIN_ID
 )
-async def random_on_handler(
+async def random_on(
     message: Message,
     state: FSMContext
 ):
 
     await state.clear()
 
-    save_random_status(
-        {
-            "enabled": True
-        }
+    set_random_status(
+        True
     )
 
     await message.answer(
-        "🟢 Random yoqildi.",
+
+        "🟢 RANDOM YOQILDI!",
+
         reply_markup=main_admin_keyboard()
+
     )
 
 
 # =========================================================
-# 🔴 RANDOM O‘CHIRISH
+# RANDOM OFF
 # =========================================================
 
 @dp.message(
@@ -1852,44 +2200,37 @@ async def random_on_handler(
     message.text == "🔴 Randomni o‘chirish"
     and message.from_user.id == ADMIN_ID
 )
-async def random_off_handler(
+async def random_off(
     message: Message,
     state: FSMContext
 ):
 
     await state.clear()
 
-    save_random_status(
-        {
-            "enabled": False
-        }
+    set_random_status(
+        False
     )
 
     await message.answer(
-        "🔴 Random o‘chirildi.",
+
+        "🔴 RANDOM O‘CHIRILDI!",
+
         reply_markup=main_admin_keyboard()
+
     )
 
 
 # =========================================================
-# 👥 QATNASHUVCHILAR
+# RANDOM WINNER
 # =========================================================
 
-@dp.message(
-    lambda message:
-    message.text == "👥 Qatnashuvchilar"
-    and is_admin(message.from_user.id)
-)
-async def participants_handler(
-    message: Message,
-    state: FSMContext
-):
+async def get_random_winner():
 
-    await state.clear()
+    users = load_users()
+
+    admins = load_admins()
 
     channels = load_channels()
-
-    requests = load_requests()
 
     mandatory_channels = []
 
@@ -1904,79 +2245,74 @@ async def participants_handler(
         try:
 
             mandatory_channels.append(
-                int(item.get("id"))
+                int(
+                    item.get("id")
+                )
             )
 
-        except Exception:
+        except:
+
             pass
 
-    if not mandatory_channels:
+    candidates = []
 
-        await message.answer(
-            "📭 Hozircha majburiy kanallar yo‘q."
-        )
+    for user_key, user_data in users.items():
 
-        return
+        try:
 
-    admins = set(
-        load_admins()
-    )
+            user_id = int(
+                user_key
+            )
 
-    participant_count = 0
+        except:
 
-    for user_id, user_channels in requests.items():
-
-        if not isinstance(
-            user_channels,
-            list
-        ):
             continue
 
-        user_channel_ids = set()
+        if user_id == ADMIN_ID:
 
-        for channel_id in user_channels:
+            continue
+
+        if user_id in admins:
+
+            continue
+
+        completed = set()
+
+        for channel_id in user_data.get(
+            "completed_channels",
+            []
+        ):
 
             try:
 
-                user_channel_ids.add(
+                completed.add(
                     int(channel_id)
                 )
 
-            except Exception:
+            except:
+
                 pass
 
         if all(
-            channel_id in user_channel_ids
+            channel_id in completed
             for channel_id in mandatory_channels
         ):
 
-            try:
+            candidates.append(
+                user_id
+            )
 
-                uid = int(
-                    user_id
-                )
+    if not candidates:
 
-            except Exception:
+        return None
 
-                continue
-
-            if uid == ADMIN_ID:
-                continue
-
-            if uid in admins:
-                continue
-
-            participant_count += 1
-
-    await message.answer(
-        "👥 <b>QATNASHUVCHILAR</b>\n\n"
-        f"🎯 Jami: <b>{participant_count} ta</b>",
-        parse_mode="HTML"
+    return random.choice(
+        candidates
     )
 
 
 # =========================================================
-# 🎲 RANDOM YUTUQ EGASI
+# 🎲 RANDOM WINNER
 # =========================================================
 
 @dp.message(
@@ -1991,110 +2327,8 @@ async def random_winner_handler(
 
     await state.clear()
 
-    channels = load_channels()
-
-    users = load_users()
-
-    mandatory_channels = []
-
-    for item in channels:
-
-        if item.get(
-            "type"
-        ) != "channel":
-
-            continue
-
-        try:
-
-            mandatory_channels.append(
-                int(item.get("id"))
-            )
-
-        except Exception:
-            pass
-
-    if not mandatory_channels:
-
-        await message.answer(
-            "📭 Hozircha majburiy kanallar yo‘q."
-        )
-
-        return
-
-    admins = set(
-        load_admins()
-    )
-
-    candidates = []
-
-    for user_id, user in users.items():
-
-        if not isinstance(
-            user,
-            dict
-        ):
-            continue
-
-        try:
-
-            uid = int(
-                user.get(
-                    "id",
-                    user_id
-                )
-            )
-
-        except Exception:
-
-            continue
-
-        if uid == ADMIN_ID:
-            continue
-
-        if uid in admins:
-            continue
-
-        completed = user.get(
-            "completed_channels",
-            []
-        )
-
-        completed_set = set()
-
-        for item in completed:
-
-            try:
-
-                completed_set.add(
-                    int(item)
-                )
-
-            except Exception:
-                pass
-
-        if all(
-            channel_id in completed_set
-            for channel_id in mandatory_channels
-        ):
-
-            candidates.append(
-                user
-            )
-
-    if not candidates:
-
-        await message.answer(
-            "❌ Hozircha barcha shartlarni "
-            "bajargan qatnashuvchi yo‘q."
-        )
-
-        return
-
     countdown = await message.answer(
-        "🎲 <b>G‘OLIB ANIQLANMOQDA...</b>\n\n"
-        "9",
-        parse_mode="HTML"
+        "9"
     )
 
     for number in range(
@@ -2110,66 +2344,120 @@ async def random_winner_handler(
         try:
 
             await countdown.edit_text(
-                "🎲 <b>G‘OLIB ANIQLANMOQDA...</b>\n\n"
-                f"{number}",
-                parse_mode="HTML"
+                str(number)
             )
 
-        except Exception:
+        except:
+
             pass
 
-    winner = random.choice(
-        candidates
+    await asyncio.sleep(
+        1
     )
 
-    winner_id = winner.get(
-        "id"
+    try:
+
+        await countdown.delete()
+
+    except:
+
+        pass
+
+    # =====================================================
+    # RANDOM
+    # =====================================================
+
+    if get_random_status():
+
+        winner_id = await get_random_winner()
+
+        if winner_id is None:
+
+            await message.answer(
+
+                "❌ Barcha shartlarni "
+                "bajargan user topilmadi."
+
+            )
+
+            return
+
+    # =====================================================
+    # MANUAL
+    # =====================================================
+
+    else:
+
+        winner = load_winner()
+
+        winner_id = winner.get(
+            "user_id"
+        )
+
+        if not winner_id:
+
+            await message.answer(
+                "❌ Yutuq egasi belgilanmagan."
+            )
+
+            return
+
+        try:
+
+            winner_id = int(
+                winner_id
+            )
+
+        except:
+
+            await message.answer(
+                "❌ Winner ID noto‘g‘ri."
+            )
+
+            return
+
+    users = load_users()
+
+    user_data = users.get(
+        str(winner_id),
+        {}
     )
 
-    first_name = winner.get(
+    first_name = user_data.get(
         "first_name",
-        ""
+        "Noma’lum"
     )
 
-    username = winner.get(
+    username = user_data.get(
         "username",
         ""
     )
 
+    username_text = ""
+
     if username:
 
-        winner_name = (
-            f"@{username}"
+        username_text = (
+            f"\nUsername: @{username}"
         )
 
-    elif first_name:
+    await message.answer(
 
-        winner_name = first_name
+        "🏆 YUTUQ EGASI!\n\n"
 
-    else:
+        f"👤 {first_name}\n"
 
-        winner_name = str(
-            winner_id
-        )
+        f"🆔 {winner_id}"
 
-    await countdown.edit_text(
-        "🎉 <b>G‘OLIB ANIQLANDI!</b>\n\n"
-        f"🏆 {winner_name}\n"
-        f"🆔 <code>{winner_id}</code>",
-        parse_mode="HTML"
-    )
+        f"{username_text}\n\n"
 
-    save_winner(
-        {
-            "user_id": winner_id,
-            "first_name": first_name,
-            "username": username
-        }
+        "🎉 Tabriklaymiz!"
+
     )
 
 
 # =========================================================
-# 📨 XABAR YUBORISH
+# 📨 BROADCAST
 # =========================================================
 
 @dp.message(
@@ -2189,10 +2477,18 @@ async def broadcast_start(
     )
 
     await message.answer(
-        "📨 Yubormoqchi bo‘lgan xabaringizni yuboring.\n\n"
-        "Matn, rasm yoki boshqa xabar yuborishingiz mumkin."
+
+        "📨 XABAR YUBORISH\n\n"
+
+        "Yubormoqchi bo‘lgan xabaringizni "
+        "shu yerga yuboring."
+
     )
 
+
+# =========================================================
+# BROADCAST PROCESS
+# =========================================================
 
 @dp.message(
     AdminStates.waiting_broadcast
@@ -2202,46 +2498,121 @@ async def broadcast_process(
     state: FSMContext
 ):
 
+    text = (
+        message.text or ""
+    ).strip()
+
+    if text in [
+
+        "➕ Kanal qo‘shish",
+        "❌ Kanalni o‘chirish",
+        "📋 Kanallar ro‘yxati",
+        "👤 Admin qo‘shish",
+        "🗑 Adminni o‘chirish",
+        "🏆 Yutuq egasi",
+        "🗑 Yutuq egasini o‘chirish",
+        "🟢 Randomni yoqish",
+        "🔴 Randomni o‘chirish",
+        "📨 Xabar yuborish"
+
+    ]:
+
+        await state.clear()
+
+        await message.answer(
+            "⚙️ Xabar yuborish bekor qilindi.",
+            reply_markup=main_admin_keyboard()
+        )
+
+        return
+
     users = load_users()
 
+    total = len(
+        users
+    )
+
+    if total == 0:
+
+        await message.answer(
+            "📭 Userlar yo‘q."
+        )
+
+        await state.clear()
+
+        return
+
+    status_message = await message.answer(
+
+        "📨 Xabar yuborilmoqda...\n\n"
+
+        f"👥 Jami: {total}"
+
+    )
+
     success = 0
+
     failed = 0
 
-    for user_id in users.keys():
+    for user_key in users.keys():
 
         try:
 
+            user_id = int(
+                user_key
+            )
+
             await message.copy_to(
-                chat_id=int(user_id)
+                chat_id=user_id
             )
 
             success += 1
 
-            await asyncio.sleep(
-                0.05
-            )
-
-        except Exception:
+        except:
 
             failed += 1
 
-    await state.clear()
+        await asyncio.sleep(
+            0.05
+        )
 
-    await message.answer(
-        "📨 <b>XABAR YUBORILDI</b>\n\n"
-        f"✅ Yetib bordi: <b>{success}</b>\n"
-        f"❌ Xatolik: <b>{failed}</b>",
-        parse_mode="HTML",
-        reply_markup=main_admin_keyboard()
-    )
+    try:
+
+        await status_message.edit_text(
+
+            "✅ XABAR YUBORILDI!\n\n"
+
+            f"👥 Jami: {total}\n"
+
+            f"✅ Yetkazildi: {success}\n"
+
+            f"❌ Xatolik: {failed}"
+
+        )
+
+    except:
+
+        await message.answer(
+
+            "✅ XABAR YUBORILDI!\n\n"
+
+            f"👥 Jami: {total}\n"
+
+            f"✅ Yetkazildi: {success}\n"
+
+            f"❌ Xatolik: {failed}"
+
+        )
+
+    await state.clear()
 
 
 # =========================================================
-# NOTOG‘RI XABAR
+# ODDIY ADMIN / USER MESSAGE
 # =========================================================
 
 @dp.message()
-async def unknown_message_handler(
+async def unknown_message(
     message: Message
 ):
 
@@ -2250,15 +2621,24 @@ async def unknown_message_handler(
     if user_id == ADMIN_ID:
 
         await message.answer(
-            "❗ Menyudan kerakli tugmani tanlang.",
+
+            "⚙️ Admin paneldan kerakli "
+            "tugmani tanlang.",
+
             reply_markup=main_admin_keyboard()
+
         )
 
-    elif user_id in load_admins():
+        return
+
+    if user_id in load_admins():
 
         await message.answer(
-            "❗ Menyudan kerakli tugmani tanlang.",
+
+            "⚙️ Kerakli tugmani tanlang.",
+
             reply_markup=normal_admin_keyboard()
+
         )
 
 
@@ -2269,55 +2649,30 @@ async def unknown_message_handler(
 async def main():
 
     print(
-        "================================="
+        "BOT ISHGA TUSHDI"
     )
 
-    print(
-        "🤖 BOT ISHGA TUSHDI"
+    await dp.start_polling(
+
+        bot,
+
+        allowed_updates=dp.resolve_used_update_types()
+
     )
-
-    print(
-        "================================="
-    )
-
-    while True:
-
-        try:
-
-            await dp.start_polling(
-                bot,
-                allowed_updates=dp.resolve_used_update_types()
-            )
-
-        except Exception as e:
-
-            print(
-                "================================="
-            )
-
-            print(
-                f"❌ BOT XATOLIK: {e}"
-            )
-
-            print(
-                "🔄 5 soniyadan keyin qayta ishga tushadi..."
-            )
-
-            print(
-                "================================="
-            )
-
-            await asyncio.sleep(
-                5
-            )
 
 
 # =========================================================
-# START
+# RUN
 # =========================================================
 
 if __name__ == "__main__":
 
-    asyncio.run(
-        main()
-    )
+    try:
+
+        asyncio.run(
+            main()
+        )
+
+    except KeyboardInterrupt:
+
+        pass
