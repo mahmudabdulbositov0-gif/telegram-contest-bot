@@ -1,6 +1,6 @@
 
 
-BOT_TOKEN = os.getenv("8791542683:AAHOvlX3WrI7_5HzhHB8IO6uI8FiVH3zQtc")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 # @userinfobot orqali olingan Telegram ID'ingizni yozing
 ADMIN_ID = 7018749665
