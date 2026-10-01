@@ -517,19 +517,19 @@ def main_admin_keyboard():
 
 
 def normal_admin_keyboard():
-
     return ReplyKeyboardMarkup(
-
         keyboard=[
-
             [
                 KeyboardButton(
                     text="🎲 Random yutuq egasi"
                 )
+            ],
+            [
+                KeyboardButton(
+                    text="👥 Qatnashuvchilar"
+                )
             ]
-
         ],
-
         resize_keyboard=True
     )
 
@@ -1387,138 +1387,87 @@ async def channel_id_process(
 # PRIVATE CHANNEL LINK
 # =========================================================
 
+# =========================================================
+# 👥 QATNASHUVCHILAR
+# =========================================================
+
 @dp.message(
-    AdminStates.waiting_channel_link
+    lambda message:
+    message.text == "👥 Qatnashuvchilar"
+    and is_admin(message.from_user.id)
 )
-async def private_channel_link_process(
+async def participants_handler(
     message: Message,
     state: FSMContext
 ):
+    await state.clear()
 
-    text = (
-        message.text or ""
-    ).strip()
+    channels = load_channels()
+    requests = load_requests()
 
-    # Boshqa admin tugmasi
-    if text in [
+    # Majburiy kanallarni olish
+    mandatory_channels = []
 
-        "➕ Kanal qo‘shish",
-        "❌ Kanalni o‘chirish",
-        "📋 Kanallar ro‘yxati",
-        "👤 Admin qo‘shish",
-        "🗑 Adminni o‘chirish",
-        "🏆 Yutuq egasi",
-        "🗑 Yutuq egasini o‘chirish",
-        "🟢 Randomni yoqish",
-        "🔴 Randomni o‘chirish",
-        "📨 Xabar yuborish"
-
-    ]:
-
-        await state.clear()
-
-        await message.answer(
-            "⚙️ Oldingi amal bekor qilindi.",
-            reply_markup=main_admin_keyboard()
-        )
-
-        return
-
-    if not re.match(
-
-        r"^https://t\.me/\+[A-Za-z0-9_-]+$",
-
-        text
-
-    ):
-
-        await message.answer(
-
-            "❌ Join Request link noto‘g‘ri.\n\n"
-
-            "Misol:\n"
-            "https://t.me/+AbCdEf123456"
-
-        )
-
-        return
-
-    data = await state.get_data()
-
-    channel_id = data.get(
-        "channel_id"
-    )
-
-    channel_name = data.get(
-        "channel_name",
-        "Kanal"
-    )
-
-    items = load_channels()
-
-    for item in items:
-
-        if item.get(
-            "type"
-        ) != "channel":
-
+    for item in channels:
+        if item.get("type") != "channel":
             continue
 
         try:
-
-            old_id = int(
-                item.get("id")
-            )
-
+            channel_id = int(item.get("id"))
+            mandatory_channels.append(channel_id)
         except:
-
             continue
 
-        if old_id == int(
-            channel_id
+    # Agar kanal bo'lmasa
+    if not mandatory_channels:
+        await message.answer(
+            "📭 Hozircha majburiy kanallar yo‘q."
+        )
+        return
+
+    # Barcha kanallarga zayavka berganlarni sanash
+    participant_count = 0
+
+    for user_id, user_channels in requests.items():
+
+        if not isinstance(user_channels, list):
+            continue
+
+        user_channel_ids = set()
+
+        for channel_id in user_channels:
+            try:
+                user_channel_ids.add(int(channel_id))
+            except:
+                pass
+
+        # Faqat BARCHA majburiy kanallarga
+        # zayavka yuborgan foydalanuvchi hisoblanadi
+        if all(
+            channel_id in user_channel_ids
+            for channel_id in mandatory_channels
         ):
+            try:
+                uid = int(user_id)
+            except:
+                continue
 
-            await message.answer(
-                "❌ Bu kanal allaqachon qo‘shilgan."
-            )
+            # Asosiy admin hisoblanmaydi
+            if uid == ADMIN_ID:
+                continue
 
-            await state.clear()
+            # Boshqa adminlar ham hisoblanmaydi
+            if uid in load_admins():
+                continue
 
-            return
+            participant_count += 1
 
-    items.append({
-
-        "type": "channel",
-
-        "id": int(channel_id),
-
-        "name": channel_name,
-
-        "link": text
-
-    })
-
-    save_channels(
-        items
-    )
-
-    await state.clear()
-
+    # Faqat umumiy sonni chiqaradi
     await message.answer(
-
-        "✅ PRIVATE KANAL QO‘SHILDI!\n\n"
-
-        f"📢 {channel_name}\n"
-
-        f"🆔 {channel_id}\n"
-
-        f"🔗 {text}",
-
-        reply_markup=main_admin_keyboard()
-
+        "👥 <b>QATNASHUVCHILAR</b>\n\n"
+        f"🎯 Jami: <b>{participant_count} ta</b>",
+        parse_mode="HTML"
     )
-
-
 # =========================================================
 # ❌ KANAL O'CHIRISH
 # =========================================================
